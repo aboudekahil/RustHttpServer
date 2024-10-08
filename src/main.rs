@@ -1,48 +1,23 @@
-use std::io;
-use std::io::{BufRead, BufReader, ErrorKind, Write};
-use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
+use std::io::{ErrorKind, Result};
+use std::net::SocketAddr;
 
 use clap::Parser;
 
 use crate::cli::*;
+use crate::tcp::handle_connection;
 
 mod cli;
+mod tcp;
 
-fn handle_client(mut stream: TcpStream) {
-    let buf_reader = BufReader::new(&mut stream);
-    let http_request: Vec<_> = buf_reader
-        .lines()
-        .map(|result| result.unwrap())
-        .take_while(|line| !line.is_empty())
-        .collect();
-    
-    
-
-    println!("Request: {http_request:#?}");
-
-    stream.write("HTTP/1.1 200 OK\r\n\r\n".as_bytes()).unwrap();
-    stream.flush().unwrap();
+fn callback(addr: SocketAddr) {
+    println!("Connected to http://{addr}");
 }
 
-fn handle_connection(server_address: SocketAddr) -> Result<(), io::Error> {
-    let listener = TcpListener::bind(server_address)?;
-
-    println!("Listening on {server_address}");
-
-    for stream in listener.incoming() {
-        let stream = stream?;
-
-        println!("Connection Established!");
-
-        handle_client(stream);
-    }
-
-    return Ok(());
-}
-
-fn main() {
+#[tokio::main]
+async fn main() -> Result<()> {
     let args: Args = Parser::parse();
-    if let Err(e) = handle_connection(SocketAddr::from((args.addr, args.port))) {
+
+    if let Err(e) = handle_connection(SocketAddr::from((args.addr, args.port)), callback).await {
         match e.kind() {
             ErrorKind::AddrInUse => {
                 eprintln!(
@@ -61,4 +36,6 @@ fn main() {
             }
         }
     }
+
+    Ok(())
 }
